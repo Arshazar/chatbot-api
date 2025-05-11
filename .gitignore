@@ -88,3 +88,4 @@ tasks/
 .taskmasterconfig
 .windsurfrules
 TASKS.md
+./scripts/

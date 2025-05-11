@@ -1,0 +1,186 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+      target: ${NODE_ENV:-development}
+    ports:
+      - '${API_GATEWAY_PORT:-3000}:3000'
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=3000
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - redis
+      - rabbitmq
+    networks:
+      - chatbot-network
+
+  auth-service:
+    container_name: auth-service
+    build:
+      context: .
+      dockerfile: apps/auth/Dockerfile
+      target: ${NODE_ENV:-development}
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_AUTH_DB:-chatbot_auth}
+      - JWT_SECRET=${JWT_SECRET:-secret}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - rabbitmq
+    networks:
+      - chatbot-network
+
+  user-service:
+    container_name: user-service
+    build:
+      context: .
+      dockerfile: apps/users/Dockerfile
+      target: ${NODE_ENV:-development}
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_USER_DB:-chatbot_users}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    networks:
+      - chatbot-network
+
+  chat-service:
+    container_name: chat-service
+    build:
+      context: .
+      dockerfile: apps/chat/Dockerfile
+      target: ${NODE_ENV:-development}
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://mongodb:27017/chatbot
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+    networks:
+      - chatbot-network
+
+  bot-service:
+    container_name: bot-service
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+      target: ${NODE_ENV:-development}
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://mongodb:27017/chatbot
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+    networks:
+      - chatbot-network
+
+  postgres:
+    container_name: postgres
+    image: postgres:16-alpine
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_MULTIPLE_DATABASES=${POSTGRES_AUTH_DB:-chatbot_auth},${POSTGRES_USER_DB:-chatbot_users}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - chatbot-network
+
+  mongodb:
+    container_name: mongodb
+    image: mongo:7
+    ports:
+      - '${MONGODB_PORT:-27017}:27017'
+    environment:
+      - MONGO_INITDB_DATABASE=chatbot
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - chatbot-network
+
+  redis:
+    container_name: redis
+    image: redis:7-alpine
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - chatbot-network
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management-alpine
+    ports:
+      - '${RABBITMQ_PORT:-5672}:5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - chatbot-network
+
+volumes:
+  postgres-data:
+  mongodb-data:
+  redis-data:
+  rabbitmq-data:
+
+networks:
+  chatbot-network:
+    driver: bridge
